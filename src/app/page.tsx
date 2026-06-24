@@ -25,12 +25,21 @@ export default function Home() {
 
   // Listen to Auth State
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    let unsubProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+
+      // Clean up previous profile listener if any
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (user) {
         // Listen to profile
         const userRef = doc(db, "users", user.uid);
-        const unsubProfile = onSnapshot(userRef, (docSnap) => {
+        unsubProfile = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
             setProfile(data);
@@ -40,18 +49,26 @@ export default function Home() {
               setActiveTab("municipal");
             }
           }
+          setIsLoading(false);
+        }, (error) => {
+          console.error("Profile load error:", error);
+          setIsLoading(false);
         });
-        return () => unsubProfile();
       } else {
         setProfile(null);
         if (activeTab === "report" || activeTab === "citizen" || activeTab === "municipal") {
           setActiveTab("impact");
         }
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubProfile) {
+        unsubProfile();
+      }
+    };
   }, [activeTab]);
 
   const handleTabChange = (tab: string) => {
