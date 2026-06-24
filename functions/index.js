@@ -1,6 +1,7 @@
 const { onRequest, onCall } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
+const { FieldValue } = require("firebase-admin/firestore");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 admin.initializeApp();
@@ -37,8 +38,16 @@ exports.analyzeIssue = onDocumentCreated("issues/{issueId}", async (event) => {
       return null;
     }
 
-    // Download image from Firebase Storage
-    const bucket = admin.storage().bucket();
+    // Download image from Firebase Storage (dynamically parse bucket to avoid emulator config mismatches)
+    let bucketName = "civicsense-ai-91b4.appspot.com"; // default fallback
+    if (issueData.image_url) {
+      const match = issueData.image_url.match(/\/b\/([^/]+)/);
+      if (match && match[1]) {
+        bucketName = match[1];
+      }
+    }
+
+    const bucket = admin.storage().bucket(bucketName);
     const file = bucket.file(storagePath);
     const [fileBuffer] = await file.download();
 
@@ -107,7 +116,7 @@ You MUST output your response in JSON format matching this schema exactly:
         status: updatedStatus,
         parent_issue_id: parentIssueId,
         ai_analysis: {
-          analyzed_at: admin.firestore.FieldValue.serverTimestamp(),
+          analyzed_at: FieldValue.serverTimestamp(),
           category: analysis.category,
           severity: analysis.severity
         }
@@ -116,7 +125,7 @@ You MUST output your response in JSON format matching this schema exactly:
       // If duplicate, increase validation/vote count on the parent issue
       if (isDuplicate && parentIssueId) {
         transaction.update(db.collection("issues").doc(parentIssueId), {
-          votes: admin.firestore.FieldValue.increment(1)
+          votes: FieldValue.increment(1)
         });
       }
 
@@ -125,7 +134,7 @@ You MUST output your response in JSON format matching this schema exactly:
       if (reporterId && updatedStatus === "verified") {
         const userRef = db.collection("users").doc(reporterId);
         transaction.set(userRef, {
-          reputation_points: admin.firestore.FieldValue.increment(10)
+          reputation_points: FieldValue.increment(10)
         }, { merge: true });
       }
     });
@@ -158,7 +167,7 @@ exports.onVoteCreated = onDocumentCreated("votes/{voteId}", async (event) => {
 
       // Update votes on issue
       transaction.update(issueRef, {
-        votes: admin.firestore.FieldValue.increment(increment)
+        votes: FieldValue.increment(increment)
       });
 
       // Update reputation points for the original reporter (+2 for upvote, -2 for downvote)
@@ -167,7 +176,7 @@ exports.onVoteCreated = onDocumentCreated("votes/{voteId}", async (event) => {
         const userRef = db.collection("users").doc(reporterId);
         const points = vote_type === "up" ? 2 : -2;
         transaction.set(userRef, {
-          reputation_points: admin.firestore.FieldValue.increment(points)
+          reputation_points: FieldValue.increment(points)
         }, { merge: true });
       }
     });
@@ -202,7 +211,6 @@ exports.getPredictiveAnalytics = onCall(async (request) => {
 
     const issuesDataStr = JSON.stringify(issues);
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
     const prompt = `Given the following historical infrastructure issue data:
 ${issuesDataStr}
 
@@ -233,7 +241,17 @@ Format your response as a valid JSON object matching this schema exactly:
   ]
 }`;
 
-    const result = await model.generateContent(prompt);
+    // Gracefully handle model access restrictions by adding a fallback path to Gemini 1.5 Flash
+    let model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    let result;
+    try {
+      result = await model.generateContent(prompt);
+    } catch (apiError) {
+      console.warn("Gemini 1.5 Pro failed, falling back to 1.5 Flash:", apiError);
+      model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      result = await model.generateContent(prompt);
+    }
+
     const responseText = result.response.text();
     const cleanJSONText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
     
