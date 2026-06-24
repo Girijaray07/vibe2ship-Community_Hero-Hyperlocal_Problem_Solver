@@ -100,9 +100,6 @@ body {
   background: #0d1527 !important;
   border-radius: 12px;
 }
-.leaflet-tile {
-  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7) !important;
-}
 .leaflet-bar {
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   box-shadow: none !important;

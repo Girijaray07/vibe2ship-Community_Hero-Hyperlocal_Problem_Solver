@@ -10,6 +10,7 @@ import Leaderboard from "../components/Leaderboard";
 import CitizenDashboard from "../components/CitizenDashboard";
 import ReportIssue from "../components/ReportIssue";
 import MunicipalDashboard from "../components/MunicipalDashboard";
+import UserProfile from "../components/UserProfile";
 import dynamic from "next/dynamic";
 import { RefreshCw, Activity, Compass, AlertCircle } from "lucide-react";
 
@@ -82,6 +83,9 @@ export default function Home() {
 
         {/* Municipal Authority Screens */}
         {activeTab === "municipal" && <MunicipalDashboard />}
+
+        {/* User Profile Screen */}
+        {activeTab === "profile" && <UserProfile />}
 
         {/* Interactive map view (Full page width map dashboard) */}
         {activeTab === "map" && (

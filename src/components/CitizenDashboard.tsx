@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { db, auth } from "../lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
-import { Award, CheckCircle2, AlertTriangle, Clock, RefreshCw, Key } from "lucide-react";
+import { Award, CheckCircle2, AlertTriangle, Clock, RefreshCw, Key, MapPin, Calendar, ListTodo, Star } from "lucide-react";
 
 interface UserProfile {
   uid: string;
@@ -23,6 +23,11 @@ interface Issue {
   description?: string;
   ai_description?: string;
   image_url?: string;
+  created_at?: any;
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
 }
 
 export default function CitizenDashboard() {
@@ -65,7 +70,12 @@ export default function CitizenDashboard() {
               votes: data.votes || 0,
               description: data.description || "",
               ai_description: data.ai_description || "",
-              image_url: data.image_url || ""
+              image_url: data.image_url || "",
+              created_at: data.created_at,
+              location: data.location ? {
+                latitude: data.location.latitude,
+                longitude: data.location.longitude
+              } : undefined
             });
           });
           setMyIssues(list);
@@ -123,9 +133,9 @@ export default function CitizenDashboard() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-6 pb-12 grid grid-cols-1 md:grid-cols-3 gap-8">
-      {/* Left Column: Reputation Meter & Badges */}
-      <div className="md:col-span-1 flex flex-col gap-6">
+    <div className="max-w-6xl mx-auto px-6 pb-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Left Column: Reputation Meter, Badges & Points Log */}
+      <div className="lg:col-span-1 flex flex-col gap-6">
         {/* Profile Card */}
         <div className="glass-panel p-6 rounded-2xl flex flex-col gap-4 bg-gradient-to-tr from-indigo-900/5 to-indigo-950/10">
           <div className="flex items-center gap-3">
@@ -179,51 +189,137 @@ export default function CitizenDashboard() {
             ))}
           </div>
         </div>
+
+        {/* Activity & Points Log Ledger */}
+        <div className="glass-panel p-6 rounded-2xl flex flex-col gap-4">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <Clock className="w-5 h-5 text-indigo-400" />
+            Activity & Points Log
+          </h3>
+          <p className="text-xs text-slate-400">Itemized history of your civic rewards.</p>
+
+          <div className="flex flex-col gap-2 mt-2 text-[10px] max-h-56 overflow-y-auto pr-1">
+            <div className="p-2.5 rounded-lg bg-slate-900/40 border border-slate-850 flex justify-between items-center">
+              <div>
+                <span className="font-semibold text-slate-200 block">Registration Bonus</span>
+                <span className="text-[9px] text-slate-500">Starter credit</span>
+              </div>
+              <span className="text-emerald-400 font-extrabold font-mono">+10 Pts</span>
+            </div>
+
+            {myIssues.map((issue) => {
+              if (issue.status === "duplicate" || issue.status === "reported") return null;
+              return (
+                <div key={issue.id} className="p-2.5 rounded-lg bg-slate-900/40 border border-slate-850 flex justify-between items-center">
+                  <div>
+                    <span className="font-semibold text-slate-200 block capitalize">AI Verification ({issue.category})</span>
+                    <span className="text-[9px] text-slate-500">Report verified as unique defect</span>
+                  </div>
+                  <span className="text-emerald-400 font-extrabold font-mono">+10 Pts</span>
+                </div>
+              );
+            })}
+
+            {myIssues.map((issue) => {
+              if (issue.votes === 0) return null;
+              return (
+                <div key={`votes-${issue.id}`} className="p-2.5 rounded-lg bg-slate-900/40 border border-slate-850 flex justify-between items-center">
+                  <div>
+                    <span className="font-semibold text-slate-200 block capitalize">Community Upvotes ({issue.category})</span>
+                    <span className="text-[9px] text-slate-500">+{issue.votes} upvotes received</span>
+                  </div>
+                  <span className="text-emerald-400 font-extrabold font-mono">+{issue.votes * 2} Pts</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Right Columns: My Filed Reports */}
-      <div className="md:col-span-2 flex flex-col gap-6">
+      <div className="lg:col-span-2 flex flex-col gap-6">
         <div className="glass-panel p-6 rounded-2xl flex flex-col gap-4 min-h-[400px]">
           <h3 className="text-base font-bold text-white">My Submitted Reports ({myIssues.length})</h3>
-          <p className="text-xs text-slate-400">Track the resolution lifecycle of issues you reported.</p>
+          <p className="text-xs text-slate-400">Track and review the full lifecycle of your reported infrastructure defects.</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
             {myIssues.length > 0 ? (
-              myIssues.map((issue) => (
-                <div key={issue.id} className="glass-card p-4 rounded-xl flex flex-col gap-3">
-                  {/* Photo preview (custom canvas or fallback placeholder image url) */}
-                  <div className="w-full h-28 rounded-lg overflow-hidden relative bg-slate-950 border border-slate-800 flex items-center justify-center">
-                    {issue.image_url ? (
-                      <img src={issue.image_url} alt={issue.category} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-[10px] text-slate-500">No Image Uploaded</span>
-                    )}
-                    <span className="absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded bg-red-500 text-white">
-                      Sev: {issue.severity}/10
-                    </span>
-                  </div>
+              myIssues.map((issue) => {
+                const dateStr = issue.created_at
+                  ? new Date(issue.created_at.seconds * 1000).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric"
+                    })
+                  : "Syncing Date";
 
-                  <div>
-                    <h4 className="text-xs font-black capitalize text-slate-200">{issue.category.replace("_", " ")}</h4>
-                    <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">
-                      {issue.ai_description || issue.description || "No description."}
-                    </p>
-                  </div>
+                return (
+                  <div key={issue.id} className="glass-card p-4 rounded-xl flex flex-col gap-3 justify-between">
+                    <div className="flex flex-col gap-3">
+                      {/* Photo preview */}
+                      <div className="w-full h-28 rounded-lg overflow-hidden relative bg-slate-950 border border-slate-800 flex items-center justify-center">
+                        {issue.image_url ? (
+                          <img src={issue.image_url} alt={issue.category} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[10px] text-slate-500">No Image Uploaded</span>
+                        )}
+                        <span className="absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded bg-red-500 text-white">
+                          Sev: {issue.severity}/10
+                        </span>
+                      </div>
 
-                  <div className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-2 text-[10px]">
-                    <span className="text-slate-500 font-semibold flex items-center gap-1">
-                      👍 {issue.votes} Votes
-                    </span>
-                    <span className={`px-2 py-0.5 rounded uppercase font-bold tracking-wider ${
-                      issue.status === "resolved" ? "bg-emerald-500/10 text-emerald-400" :
-                      issue.status === "in-progress" ? "bg-amber-500/10 text-amber-400" :
-                      issue.status === "duplicate" ? "bg-slate-500/10 text-slate-400" : "bg-indigo-500/10 text-indigo-400"
-                    }`}>
-                      {issue.status}
-                    </span>
+                      {/* Header metrics */}
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                          {dateStr}
+                        </span>
+                        {issue.location && (
+                          <span className="flex items-center gap-0.5 font-semibold text-indigo-400">
+                            <MapPin className="w-3.5 h-3.5" />
+                            {issue.location.latitude.toFixed(4)}, {issue.location.longitude.toFixed(4)}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Description parameters */}
+                      <div>
+                        <h4 className="text-xs font-black capitalize text-slate-100 mt-1">{issue.category.replace("_", " ")}</h4>
+                        <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">
+                          {issue.ai_description || issue.description || "No description."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Progress tracking timeline */}
+                    <div className="flex flex-col gap-2 border-t border-slate-800/80 pt-3">
+                      {/* Timeline steps */}
+                      <div className="flex justify-between items-center px-1 text-[8px] font-black uppercase tracking-wider">
+                        <span className="text-indigo-400">Reported</span>
+                        <span className="text-slate-700">→</span>
+                        <span className={issue.status !== "reported" && issue.status !== "duplicate" ? "text-blue-400" : "text-slate-600"}>AI Verified</span>
+                        <span className="text-slate-700">→</span>
+                        <span className={issue.status === "in-progress" || issue.status === "resolved" ? "text-amber-400" : "text-slate-600"}>Fixing</span>
+                        <span className="text-slate-700">→</span>
+                        <span className={issue.status === "resolved" ? "text-emerald-400" : "text-slate-600"}>Resolved</span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-[10px] mt-1 text-slate-400">
+                        <span className="font-semibold flex items-center gap-1">
+                          👍 {issue.votes} Votes
+                        </span>
+                        <span className={`px-2 py-0.5 rounded font-black tracking-wider uppercase text-[9px] ${
+                          issue.status === "resolved" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                          issue.status === "in-progress" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                          issue.status === "duplicate" ? "bg-slate-500/10 text-slate-400 border border-slate-800" : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                        }`}>
+                          {issue.status}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="col-span-2 text-center py-20 text-xs text-slate-500 italic flex flex-col items-center gap-2">
                 <Clock className="w-8 h-8 text-slate-600 animate-pulse" />

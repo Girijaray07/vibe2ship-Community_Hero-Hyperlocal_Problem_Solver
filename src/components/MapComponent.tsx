@@ -86,6 +86,13 @@ export default function MapComponent({
 
     mapRef.current = map;
 
+    // Call invalidateSize after a short timeout to make sure container size is fully calculated
+    setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 250);
+
     // Handle clicks to drop reporting pin
     map.on("click", (e: L.LeafletMouseEvent) => {
       if (!isReporting || !onLocationSelected) return;

@@ -16,14 +16,18 @@ interface Stats {
 export default function ImpactDashboard() {
   const [stats, setStats] = useState<Stats>({ total: 0, verified: 0, inProgress: 0, resolved: 0, duplicates: 0 });
   const [recentIssues, setRecentIssues] = useState<any[]>([]);
+  const [allIssues, setAllIssues] = useState<any[]>([]);
 
   useEffect(() => {
     // 1. Listen to all issues to compute stats
     const qStats = query(collection(db, "issues"));
     const unsubscribeStats = onSnapshot(qStats, (snapshot) => {
+      const list: any[] = [];
       const counts = { total: 0, verified: 0, inProgress: 0, resolved: 0, duplicates: 0 };
       snapshot.forEach((docSnap) => {
-        const status = docSnap.data().status;
+        const data = docSnap.data();
+        list.push(data);
+        const status = data.status;
         counts.total++;
         if (status === "verified") counts.verified++;
         else if (status === "in-progress") counts.inProgress++;
@@ -31,6 +35,7 @@ export default function ImpactDashboard() {
         else if (status === "duplicate") counts.duplicates++;
       });
       setStats(counts);
+      setAllIssues(list);
     });
 
     // 2. Fetch 5 most recent resolved/in-progress issues for feed
@@ -113,25 +118,28 @@ export default function ImpactDashboard() {
               <TrendingUp className="w-5 h-5 text-indigo-400" />
             </div>
 
-            {/* Simulated graph or Category visual list */}
+            {/* Dynamic Category visual list */}
             <div className="flex flex-col gap-3 mt-2">
               {[
-                { category: "Pothole", count: recentIssues.filter(x => x.category === "pothole").length + (stats.total > 0 ? 3 : 0), percent: 45, color: "bg-indigo-500" },
-                { category: "Road Damage", count: recentIssues.filter(x => x.category === "road damage").length + (stats.total > 0 ? 1 : 0), percent: 20, color: "bg-blue-500" },
-                { category: "Water Leakage", count: recentIssues.filter(x => x.category === "water leakage").length + (stats.total > 0 ? 1 : 0), percent: 15, color: "bg-teal-500" },
-                { category: "Garbage Pile", count: recentIssues.filter(x => x.category === "garbage").length + (stats.total > 0 ? 2 : 0), percent: 12, color: "bg-amber-500" },
-                { category: "Broken Streetlight", count: recentIssues.filter(x => x.category === "broken streetlight").length + (stats.total > 0 ? 1 : 0), percent: 8, color: "bg-pink-500" }
-              ].map((item, idx) => (
-                <div key={idx} className="flex flex-col gap-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-300 capitalize">{item.category}</span>
-                    <span className="text-slate-400">{item.count} Active</span>
+                { category: "Pothole", count: allIssues.filter(x => x.category === "pothole").length, color: "bg-indigo-500" },
+                { category: "Road Damage", count: allIssues.filter(x => x.category === "road damage").length, color: "bg-blue-500" },
+                { category: "Water Leakage", count: allIssues.filter(x => x.category === "water leakage").length, color: "bg-teal-500" },
+                { category: "Garbage Pile", count: allIssues.filter(x => x.category === "garbage").length, color: "bg-amber-500" },
+                { category: "Broken Streetlight", count: allIssues.filter(x => x.category === "broken streetlight").length, color: "bg-pink-500" }
+              ].map((item, idx) => {
+                const percent = allIssues.length > 0 ? Math.round((item.count / allIssues.length) * 100) : 0;
+                return (
+                  <div key={idx} className="flex flex-col gap-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-slate-300 capitalize">{item.category}</span>
+                      <span className="text-slate-400">{item.count} Active</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
+                      <div className={`h-full ${item.color}`} style={{ width: `${percent}%` }} />
+                    </div>
                   </div>
-                  <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
-                    <div className={`h-full ${item.color}`} style={{ width: `${item.percent}%` }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

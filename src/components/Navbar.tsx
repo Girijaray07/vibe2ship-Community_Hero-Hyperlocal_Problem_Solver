@@ -126,7 +126,8 @@ export default function Navbar({ onTabChange, activeTab }: NavbarProps) {
             { id: "map", label: "Interactive Map" },
             { id: "leaderboard", label: "Leaderboard" },
             ...(userData?.role === "citizen" || !userData ? [{ id: "report", label: "Report Issue" }, { id: "citizen", label: "Citizen Panel" }] : []),
-            ...(userData?.role === "authority" ? [{ id: "municipal", label: "Municipal Dashboard" }] : [])
+            ...(userData?.role === "authority" ? [{ id: "municipal", label: "Municipal Dashboard" }] : []),
+            ...(userData ? [{ id: "profile", label: "My Profile" }] : [])
           ].map((tab) => (
             <button
               key={tab.id}
