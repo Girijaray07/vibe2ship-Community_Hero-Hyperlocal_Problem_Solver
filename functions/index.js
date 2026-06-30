@@ -11,6 +11,47 @@ const db = admin.firestore();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
+const FLASH_MODELS = [
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-latest",
+  "gemini-2.0-flash",
+  "gemini-2.5-flash",
+  "gemini-1.5-flash-8b",
+  "gemini-2.0-flash-exp",
+  "gemini-1.5-pro"
+];
+
+const PRO_MODELS = [
+  "gemini-1.5-pro",
+  "gemini-1.5-pro-latest",
+  "gemini-2.0-pro-exp",
+  "gemini-2.5-pro",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash"
+];
+
+async function generateContentWithFallback(modelNames, contentParts) {
+  let lastError = null;
+  for (const name of modelNames) {
+    try {
+      console.log(`Attempting generateContent with model: ${name}`);
+      const model = genAI.getGenerativeModel({ model: name });
+      const result = await model.generateContent(contentParts);
+      if (result && result.response) {
+        const text = result.response.text();
+        if (text) {
+          console.log(`Success with model: ${name}`);
+          return result;
+        }
+      }
+    } catch (e) {
+      console.warn(`Model ${name} failed:`, e.message || e);
+      lastError = e;
+    }
+  }
+  throw lastError || new Error("All fallback models failed");
+}
+
 // Helper to convert image buffer to generative part
 function bufferToGenerativePart(buffer, mimeType) {
   return {
@@ -55,7 +96,6 @@ exports.analyzeIssue = onDocumentCreated("issues/{issueId}", async (event) => {
     const imagePart = bufferToGenerativePart(fileBuffer, mimeType);
 
     // Call Gemini 1.5 Flash with prompt
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = `Analyze this infrastructure image. Identify if it contains: pothole, garbage, water leakage, broken streetlight, or road damage.
 Provide a severity score from 1-10 (where 10 is extremely hazardous) and a brief description.
 You MUST output your response in JSON format matching this schema exactly:
@@ -65,7 +105,7 @@ You MUST output your response in JSON format matching this schema exactly:
   "description": string
 }`;
 
-    const result = await model.generateContent([prompt, imagePart]);
+    const result = await generateContentWithFallback(FLASH_MODELS, [prompt, imagePart]);
     const responseText = result.response.text();
     
     // Clean markdown wraps
@@ -241,16 +281,7 @@ Format your response as a valid JSON object matching this schema exactly:
   ]
 }`;
 
-    // Gracefully handle model access restrictions by adding a fallback path to Gemini 1.5 Flash
-    let model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-    let result;
-    try {
-      result = await model.generateContent(prompt);
-    } catch (apiError) {
-      console.warn("Gemini 1.5 Pro failed, falling back to 1.5 Flash:", apiError);
-      model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-      result = await model.generateContent(prompt);
-    }
+    const result = await generateContentWithFallback(PRO_MODELS, prompt);
 
     const responseText = result.response.text();
     const cleanJSONText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
